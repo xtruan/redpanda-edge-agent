@@ -1,0 +1,22 @@
+create_topics: true
+source:
+  mqtt: true
+  name: "source"
+  # List of outbound topics to push from source to destination
+  topics:
+    - "mqtt/#" # Push all mqtt/ topics
+  tls:
+    enabled: true
+    client_key: "/etc/redpanda/certs/agent.key"
+    client_cert: "/etc/redpanda/certs/agent.crt"
+    ca_cert: "/etc/redpanda/certs/ca.crt"
+destination:
+  name: "destination"
+  bootstrap_servers: 172.24.1.20:9092 # use secured internal interface
+  max_version: "3.0.0" # maximum kafka protocol version
+  tls:
+    enabled: true
+    client_key: "/etc/redpanda/certs/agent.key"
+    client_cert: "/etc/redpanda/certs/agent.crt"
+    ca_cert: "/etc/redpanda/certs/ca.crt"
+

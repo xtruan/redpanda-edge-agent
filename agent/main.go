@@ -27,18 +27,24 @@ type Redpanda struct {
 }
 
 var (
-	source          Redpanda
-	sourceOnce      sync.Once
-	destination     Redpanda
-	destinationOnce sync.Once
-	wg              sync.WaitGroup
+	source           Redpanda
+	sourceMqtt       Mqtt
+	sourceOnce       sync.Once
+	destination      Redpanda
+	destinationOnce  sync.Once
+	wg               sync.WaitGroup
+	createTopicCache []string
 )
 
 // Closes the source and destination client connections
-func shutdown() {
+func shutdown(mqttSource bool) {
 	log.Infoln("Closing client connections")
-	source.adm.Close()
-	source.client.Close()
+	if mqttSource {
+		sourceMqtt.server.Close()
+	} else {
+		source.adm.Close()
+		source.client.Close()
+	}
 	destination.adm.Close()
 	destination.client.Close()
 }
@@ -141,7 +147,6 @@ func contains(s []string, e string) bool {
 // Check the topics exist on the given cluster. If the topics to not exist then
 // this function will attempt to create them if configured to do so.
 func checkTopics(cluster *Redpanda) {
-	ctx := context.Background()
 	var createTopics []string
 	for _, topic := range AllTopics() {
 		if topic.sourceName == schemaTopic ||
@@ -160,6 +165,14 @@ func checkTopics(cluster *Redpanda) {
 			}
 		}
 	}
+
+	if len(createTopics) > 0 {
+		checkSpecifiedTopics(cluster, createTopics)
+	}
+}
+
+func checkSpecifiedTopics(cluster *Redpanda, createTopics []string) {
+	ctx := context.Background()
 
 	topicDetails, err := cluster.adm.ListTopics(ctx, createTopics...)
 	if err != nil {
@@ -357,26 +370,43 @@ func main() {
 	log.SetLevel(logLevel)
 
 	InitConfig(configFile)
-	initClient(&source, &sourceOnce, Source)
-	initClient(&destination, &destinationOnce, Destination)
+	mqttSource := config.Bool("source.mqtt")
 
-	checkTopics(&source)
-	checkTopics(&destination)
+	if mqttSource {
+		initMqtt(&sourceMqtt, &sourceOnce, Source)
+		go serveMqtt(&sourceMqtt)
+
+		initClient(&destination, &destinationOnce, Destination)
+	} else {
+		initClient(&source, &sourceOnce, Source)
+		initClient(&destination, &destinationOnce, Destination)
+
+		checkTopics(&source)
+		checkTopics(&destination)
+	}
 
 	ctx, stop := signal.NotifyContext(
 		context.Background(), os.Interrupt, os.Kill)
-	if len(source.topics) > 0 {
-		wg.Add(1)
-		go forwardRecords(&source, &destination, ctx) // Push to destination
-	}
-	if len(destination.topics) > 0 {
-		wg.Add(1)
-		go forwardRecords(&destination, &source, ctx) // Pull from destination
+
+	if mqttSource {
+		if len(sourceMqtt.topics) > 0 {
+			wg.Add(1)
+			go forwardMqttRecords(&sourceMqtt, &destination, ctx) // Push to destination
+		}
+	} else {
+		if len(source.topics) > 0 {
+			wg.Add(1)
+			go forwardRecords(&source, &destination, ctx) // Push to destination
+		}
+		if len(destination.topics) > 0 {
+			wg.Add(1)
+			go forwardRecords(&destination, &source, ctx) // Pull from destination
+		}
 	}
 	wg.Wait()
 
 	ctx.Done()
 	stop()
-	shutdown()
+	shutdown(mqttSource)
 	log.Infoln("Agent stopped")
 }

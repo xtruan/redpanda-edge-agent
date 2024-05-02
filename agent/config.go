@@ -205,7 +205,9 @@ func circular(t1, t2 *Topic) bool {
 // Validate the config
 func validate() {
 	config.MustString("id")
-	config.MustString("source.bootstrap_servers")
+	if !config.Bool("source.mqtt") {
+		config.MustString("source.bootstrap_servers")
+	}
 	config.MustString("destination.bootstrap_servers")
 
 	topics := AllTopics()
@@ -228,6 +230,15 @@ func validate() {
 // Initializes the necessary TLS configuration options
 func TLSOpt(tlsConfig *TLSConfig, opts []kgo.Opt) []kgo.Opt {
 	if tlsConfig.Enabled {
+		tc := TLSConf(tlsConfig)
+		opts = append(opts, kgo.DialTLSConfig(tc))
+	}
+	return opts
+}
+
+// Initializes the necessary TLS configuration
+func TLSConf(tlsConfig *TLSConfig) *tls.Config {
+	if tlsConfig.Enabled {
 		if tlsConfig.CaFile != "" ||
 			tlsConfig.ClientCertFile != "" ||
 			tlsConfig.ClientKeyFile != "" {
@@ -240,12 +251,10 @@ func TLSOpt(tlsConfig *TLSConfig, opts []kgo.Opt) []kgo.Opt {
 			if err != nil {
 				log.Fatalf("Unable to create TLS config: %v", err)
 			}
-			opts = append(opts, kgo.DialTLSConfig(tc))
-		} else {
-			opts = append(opts, kgo.DialTLSConfig(new(tls.Config)))
+			return tc
 		}
 	}
-	return opts
+	return new(tls.Config)
 }
 
 // Initializes the necessary SASL configuration options

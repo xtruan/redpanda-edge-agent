@@ -21,3 +21,5 @@ redpanda-edge-agent*
 
 # Python venv
 env/
+
+test/
