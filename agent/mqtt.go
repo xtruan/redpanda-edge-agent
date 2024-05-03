@@ -127,15 +127,15 @@ func serveMqtt(mq *Mqtt) {
 
 func forwardMqttRecords(src *Mqtt, dst *Redpanda, ctx context.Context) {
 	defer wg.Done()
+	// var errCount int = 0
+
 	// Subscribe to a filter and handle any received messages via a callback function.
-	callbackFn := func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
+	recordHandler := func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
 		// log.Debug("Inline MQTT client receive - ",
 		// 	"client: ", cl.ID,
 		// 	", subscriptionId: ", sub.Identifier,
 		// 	", topic: ", pk.TopicName,
 		// 	", payload: ", string(pk.Payload))
-
-		var errCount int = 0
 
 		// Convert topic from MQTT to Redpanda style
 		// TODO: handle user topic mapping, i.e. source:destination
@@ -145,38 +145,36 @@ func forwardMqttRecords(src *Mqtt, dst *Redpanda, ctx context.Context) {
 		// TODO: allow resetting the cache/syncing with Redpanda
 		if !contains(createTopicCache, topic) {
 			createTopicCache = append(createTopicCache, topic)
+			// Need to check/create topics here because MQTT allows wildcards
 			checkSpecifiedTopics(dst, createTopicCache)
 		}
 
 		// Send records to destination
-		// err := dst.client.ProduceSync(
-		// 	ctx, kgo.KeyStringRecord(cl.ID, string(pk.Payload))).FirstErr()
-		record := kgo.StringRecord(string(pk.Payload))
-		record.Topic = topic
-		err := dst.client.ProduceSync(
-			ctx, record).FirstErr()
-		if err != nil {
-			if err == context.Canceled {
-				logWithId("info", src.name,
-					fmt.Sprintf("Received interrupt: %s", err.Error()))
-				return
+		record := createRecord(topic, "", string(pk.Payload))
+		dst.client.Produce(ctx, record, func(_ *kgo.Record, err error) {
+			if err != nil {
+				if err == context.Canceled {
+					logWithId("info", src.name,
+						fmt.Sprintf("Received interrupt: %s", err.Error()))
+					return
+				}
+				logWithId("error", src.name,
+					fmt.Sprintf("Unable to send %d record(s) to %s: %s",
+						1, dst.name, err.Error()))
+				// backoff(&errCount)
+			} else {
+				logWithId("debug", src.name,
+					fmt.Sprintf("Sent %d records to %s",
+						1, dst.name))
 			}
-			logWithId("error", src.name,
-				fmt.Sprintf("Unable to send %d record(s) to %s: %s",
-					1, dst.name, err.Error()))
-			backoff(&errCount)
-		} else {
-			logWithId("debug", src.name,
-				fmt.Sprintf("Sent %d records to %s",
-					1, dst.name))
-		}
+		})
 	}
 
 	log.Info("Inline MQTT client subscribing: ", src.topics)
 	i := 0
 	for _, topic := range src.topics {
 		i += 1
-		_ = src.server.Subscribe(topic.consumeFrom(), i, callbackFn)
+		_ = src.server.Subscribe(topic.consumeFrom(), i, recordHandler)
 	}
 
 	// Wait for the context to be cancelled

@@ -244,6 +244,18 @@ func logWithId(lvl string, id string, msg string) {
 	}
 }
 
+func createRecord(topic string, key string, value string) *kgo.Record {
+	if key == "" {
+		record := kgo.StringRecord(value)
+		record.Topic = topic
+		return record
+	} else {
+		record := kgo.KeyStringRecord(key, value)
+		record.Topic = topic
+		return record
+	}
+}
+
 // Continuously fetch batches of records from the `src` cluster and forward
 // them to the `dst` cluster. Consumer offsets are only committed when the
 // `dst` cluster acknowledges the records.
