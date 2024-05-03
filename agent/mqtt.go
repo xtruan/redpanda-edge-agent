@@ -32,7 +32,7 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 		infoAddr := ":8080"
 		tlsTcpAddr := ":8883"
 		tlsWsAddr := ":8084"
-		tlsInfoAddr := ":8443"
+		// tlsInfoAddr := ":8443"
 
 		name := config.String(
 			fmt.Sprintf("%s.name", prefix))
@@ -103,17 +103,17 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 				log.Fatal(err)
 			}
 
-			https := listeners.NewHTTPStats(
-				listeners.Config{
-					ID:        "https",
-					Address:   tlsInfoAddr,
-					TLSConfig: tc,
-				}, mq.server.Info,
-			)
-			err = mq.server.AddListener(https)
-			if err != nil {
-				log.Fatal(err)
-			}
+			// https := listeners.NewHTTPStats(
+			// 	listeners.Config{
+			// 		ID:        "https",
+			// 		Address:   tlsInfoAddr,
+			// 		TLSConfig: tc,
+			// 	}, mq.server.Info,
+			// )
+			// err = mq.server.AddListener(https)
+			// if err != nil {
+			// 	log.Fatal(err)
+			// }
 		}
 	})
 }
@@ -131,11 +131,11 @@ func forwardMqttRecords(src *Mqtt, dst *Redpanda, ctx context.Context) {
 
 	// Subscribe to a filter and handle any received messages via a callback function.
 	recordHandler := func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
-		// log.Debug("Inline MQTT client receive - ",
-		// 	"client: ", cl.ID,
-		// 	", subscriptionId: ", sub.Identifier,
-		// 	", topic: ", pk.TopicName,
-		// 	", payload: ", string(pk.Payload))
+		log.Debug("Inline MQTT client receive - ",
+			"client: ", cl.ID,
+			", subId: ", sub.Identifier,
+			", topic: ", pk.TopicName,
+			", payload: ", string(pk.Payload))
 
 		// Convert topic from MQTT to Redpanda style
 		// TODO: handle user topic mapping, i.e. source:destination
