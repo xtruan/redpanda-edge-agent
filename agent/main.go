@@ -82,13 +82,16 @@ func initClient(rp *Redpanda, mutex *sync.Once, prefix Prefix) {
 			kgo.SeedBrokers(strings.Split(servers, ",")...),
 			// https://github.com/redpanda-data/redpanda/issues/8546 (fixed)
 			// kgo.ProducerBatchCompression(kgo.NoCompression()),
-			kgo.ProducerBatchCompression(
-				kgo.GzipCompression(),
-				kgo.ZstdCompression(),
-				kgo.SnappyCompression(),
-				kgo.Lz4Compression(),
-				kgo.NoCompression(),
-			),
+
+			// https://www.humansecurity.com/tech-engineering-blog/optimizing-kafka-for-throughput/#:~:text=Conclusions
+			// TL;DR: use snappy, and it's the default so we don't need to explicitly specify
+			// kgo.ProducerBatchCompression(
+			// 	kgo.GzipCompression(),
+			// 	kgo.ZstdCompression(),
+			// 	kgo.SnappyCompression(),
+			// 	kgo.Lz4Compression(),
+			// 	kgo.NoCompression(),
+			// ),
 			// kgo.ProducerBatchMaxBytes(1024*1024),
 		)
 		if len(topics) > 0 {
