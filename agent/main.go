@@ -82,8 +82,14 @@ func initClient(rp *Redpanda, mutex *sync.Once, prefix Prefix) {
 			kgo.SeedBrokers(strings.Split(servers, ",")...),
 			// https://github.com/redpanda-data/redpanda/issues/8546 (fixed)
 			// kgo.ProducerBatchCompression(kgo.NoCompression()),
-			kgo.ProducerBatchCompression(kgo.SnappyCompression()),
-			kgo.ProducerBatchMaxBytes(1024*1024),
+			kgo.ProducerBatchCompression(
+				kgo.GzipCompression(),
+				kgo.ZstdCompression(),
+				kgo.SnappyCompression(),
+				kgo.Lz4Compression(),
+				kgo.NoCompression(),
+			),
+			// kgo.ProducerBatchMaxBytes(1024*1024),
 		)
 		if len(topics) > 0 {
 			opts = append(opts,
