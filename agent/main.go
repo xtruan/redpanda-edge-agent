@@ -80,8 +80,9 @@ func initClient(rp *Redpanda, mutex *sync.Once, prefix Prefix) {
 		opts := []kgo.Opt{}
 		opts = append(opts,
 			kgo.SeedBrokers(strings.Split(servers, ",")...),
-			// https://github.com/redpanda-data/redpanda/issues/8546
-			kgo.ProducerBatchCompression(kgo.NoCompression()),
+			// https://github.com/redpanda-data/redpanda/issues/8546 (fixed)
+			// kgo.ProducerBatchCompression(kgo.NoCompression()),
+			kgo.ProducerBatchCompression(kgo.SnappyCompression(), kgo.NoCompression()),
 		)
 		if len(topics) > 0 {
 			opts = append(opts,
