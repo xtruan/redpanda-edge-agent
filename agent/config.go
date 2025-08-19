@@ -109,6 +109,8 @@ type TLSConfig struct {
 var defaultConfig = confmap.Provider(map[string]interface{}{
 	"id":                            defaultID,
 	"create_topics":                 false,
+	"create_topic_partitions":       -1,
+	"create_topic_replicas":         -1,
 	"max_poll_records":              1000,
 	"max_backoff_secs":              600, // ten minutes
 	"source.name":                   "source",

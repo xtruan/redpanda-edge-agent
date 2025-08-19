@@ -194,9 +194,15 @@ func checkSpecifiedTopics(cluster *Redpanda, createTopics []string) {
 	for _, topic := range createTopics {
 		if !topicDetails.Has(topic) {
 			if config.Exists("create_topics") {
-				// Use the clusters default partition and replication settings
+				// Get partition and replication configuration
+				partitions := getTopicPartitions()
+				replicationFactor := getTopicReplicationFactor()
+				
+				log.Infof("Creating topic '%s' on %s with %d partitions and %d replicas",
+					topic, cluster.name, partitions, replicationFactor)
+
 				resp, _ := cluster.adm.CreateTopics(
-					ctx, -1, -1, nil, topic)
+					ctx, partitions, replicationFactor, nil, topic)
 				for _, ctr := range resp {
 					if ctr.Err != nil {
 						log.Warnf("Unable to create topic '%s' on %s: %s",
@@ -215,6 +221,32 @@ func checkSpecifiedTopics(cluster *Redpanda, createTopics []string) {
 				topic, cluster.name)
 		}
 	}
+}
+
+// getTopicPartitions returns the number of partitions to use when creating topics.
+// It reads from config "create_topic_partitions", defaults to -1 (cluster default) if not set.
+func getTopicPartitions() int32 {
+	if config.Exists("create_topic_partitions") {
+		partitions := config.Int("create_topic_partitions")
+		if partitions > 0 {
+			return int32(partitions)
+		}
+	}
+	// Return -1 to use cluster default
+	return -1
+}
+
+// getTopicReplicationFactor returns the replication factor to use when creating topics.
+// It reads from config "create_topic_replicas", defaults to -1 (cluster default) if not set.
+func getTopicReplicationFactor() int16 {
+	if config.Exists("create_topic_replicas") {
+		replication := config.Int("create_topic_replicas")
+		if replication > 0 {
+			return int16(replication)
+		}
+	}
+	// Return -1 to use cluster default
+	return -1
 }
 
 // Pauses fetching new records when a fetch error is received.

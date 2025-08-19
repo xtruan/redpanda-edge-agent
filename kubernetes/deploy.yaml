@@ -8,6 +8,8 @@ metadata:
 data:
   agent.yaml: |
     create_topics: true
+    create_topic_partitions: 9
+    create_topic_replicas: 3
     source:
       name: "source"
       bootstrap_servers: redpanda-src:10092 # use secured internal interface

@@ -1,4 +1,6 @@
 create_topics: true
+create_topic_partitions: 3
+create_topic_replicas: 1
 source:
   mqtt: true
   name: "source"
