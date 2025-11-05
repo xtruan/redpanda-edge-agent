@@ -29,10 +29,8 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 		// TODO: allow specifying these in the config yaml
 		tcpAddr := ":1883"
 		wsAddr := ":8083"
-		infoAddr := ":8081"
 		tlsTcpAddr := ":8883"
 		tlsWsAddr := ":8084"
-		// tlsInfoAddr := ":8443"
 
 		name := config.String(
 			fmt.Sprintf("%s.name", prefix))
@@ -65,17 +63,8 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 			log.Fatal(err)
 		}
 
-		http := listeners.NewHTTPStats(
-			listeners.Config{
-				ID:      "http",
-				Address: infoAddr,
-			},
-			mq.server.Info,
-		)
-		err = mq.server.AddListener(http)
-		if err != nil {
-			log.Fatal(err)
-		}
+		// HTTP stats are now served by the unified monitoring server
+		// The old separate HTTP listener on port 8081 has been removed
 
 		tlsPath := fmt.Sprintf("%s.tls", prefix)
 		if config.Exists(tlsPath) {
@@ -102,18 +91,6 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 			if err != nil {
 				log.Fatal(err)
 			}
-
-			// https := listeners.NewHTTPStats(
-			// 	listeners.Config{
-			// 		ID:        "https",
-			// 		Address:   tlsInfoAddr,
-			// 		TLSConfig: tc,
-			// 	}, mq.server.Info,
-			// )
-			// err = mq.server.AddListener(https)
-			// if err != nil {
-			// 	log.Fatal(err)
-			// }
 		}
 	})
 }
@@ -136,6 +113,9 @@ func forwardMqttRecords(src *Mqtt, dst *Redpanda, ctx context.Context) {
 			", subId: ", sub.Identifier,
 			", topic: ", pk.TopicName,
 			", payload: ", string(pk.Payload))
+
+		// Track MQTT record consumption
+		incrementRecordsConsumed(1)
 
 		// Convert topic from MQTT to Redpanda style
 		// TODO: handle user topic mapping, i.e. source:destination
@@ -161,8 +141,10 @@ func forwardMqttRecords(src *Mqtt, dst *Redpanda, ctx context.Context) {
 				logWithId("error", src.name,
 					fmt.Sprintf("Unable to send %d record(s) to %s: %s",
 						1, dst.name, err.Error()))
+				incrementRecordsFailed(1)
 				// backoff(&errCount)
 			} else {
+				incrementRecordsProduced(1)
 				logWithId("debug", src.name,
 					fmt.Sprintf("Sent %d records to %s",
 						1, dst.name))

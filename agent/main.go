@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	mqtt "github.com/mochi-mqtt/server/v2"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 
@@ -41,11 +42,11 @@ var (
 func shutdown(mqttSource bool) {
 	log.Infoln("Closing client connections")
 	setStatus("stopping")
-	
+
 	if statusServer != nil {
 		statusServer.Shutdown()
 	}
-	
+
 	if mqttSource {
 		sourceMqtt.server.Close()
 	} else {
@@ -204,7 +205,7 @@ func checkSpecifiedTopics(cluster *Redpanda, createTopics []string) {
 				// Get partition and replication configuration
 				partitions := getTopicPartitions()
 				replicationFactor := getTopicReplicationFactor()
-				
+
 				log.Infof("Creating topic '%s' on %s with %d partitions and %d replicas",
 					topic, cluster.name, partitions, replicationFactor)
 
@@ -441,8 +442,16 @@ func main() {
 	InitConfig(configFile)
 	mqttSource := config.Bool("source.mqtt")
 
-	// Initialize HTTP status server
-	statusServer = initStatusServer(*httpAddr)
+	// Initialize MQTT if needed (before HTTP server so we can pass reference)
+	var mqttServerRef *mqtt.Server
+	if mqttSource {
+		initMqtt(&sourceMqtt, &sourceOnce, Source)
+		mqttServerRef = sourceMqtt.server
+		go serveMqtt(&sourceMqtt)
+	}
+
+	// Initialize HTTP status server with MQTT reference
+	statusServer = initStatusServer(*httpAddr, mqttServerRef)
 	go func() {
 		if err := statusServer.Start(); err != nil && err != http.ErrServerClosed {
 			log.Errorf("HTTP server error: %v", err)
@@ -451,11 +460,9 @@ func main() {
 	setStatus("initializing")
 
 	if mqttSource {
-		initMqtt(&sourceMqtt, &sourceOnce, Source)
-		go serveMqtt(&sourceMqtt)
 
 		initClient(&destination, &destinationOnce, Destination)
-		
+
 		// Set agent info for status reporting
 		var topicNames []string
 		for _, t := range sourceMqtt.topics {
@@ -468,7 +475,7 @@ func main() {
 
 		checkTopics(&source)
 		checkTopics(&destination)
-		
+
 		// Set agent info for status reporting
 		var topicNames []string
 		for _, t := range AllTopics() {
