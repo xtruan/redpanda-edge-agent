@@ -1,16 +1,10 @@
 <div align="center">
-  <img width="15%" src="./redpanda_lab1.png" />
-  <br />
   This is a <a href="https://github.com/redpanda-data/redpanda-labs">Redpanda Labs</a> project
 </div>
 
 # Redpanda Edge Agent
 
 A lightweight Internet of Things (IoT) agent that runs alongside Redpanda at the edge to forward events to a central Kafka API compatible cluster. The agent is written in Go and uses the [franz-go](https://github.com/twmb/franz-go) Kafka client library.
-
-<p align="center">
-  <img width="50%" src="./redpanda_iot.png" />
-</p>
 
 # Build the agent
 
