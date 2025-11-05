@@ -29,7 +29,7 @@ func initMqtt(mq *Mqtt, mutex *sync.Once, prefix Prefix) {
 		// TODO: allow specifying these in the config yaml
 		tcpAddr := ":1883"
 		wsAddr := ":8083"
-		infoAddr := ":8080"
+		infoAddr := ":8081"
 		tlsTcpAddr := ":8883"
 		tlsWsAddr := ":8084"
 		// tlsInfoAddr := ":8443"
