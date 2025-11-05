@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -39,6 +40,12 @@ var (
 // Closes the source and destination client connections
 func shutdown(mqttSource bool) {
 	log.Infoln("Closing client connections")
+	setStatus("stopping")
+	
+	if statusServer != nil {
+		statusServer.Shutdown()
+	}
+	
 	if mqttSource {
 		sourceMqtt.server.Close()
 	} else {
@@ -266,6 +273,7 @@ func backoff(exp *int) {
 		backoff = config.Float64("max_backoff_secs")
 	}
 	log.Warnf("Backing off for %d seconds", int(backoff))
+	updateErrorCount(*exp, fmt.Sprintf("Backing off for %d seconds", int(backoff)))
 	time.Sleep(time.Duration(backoff) * time.Second)
 }
 
@@ -338,6 +346,7 @@ func forwardRecords(src *Redpanda, dst *Redpanda, ctx context.Context) {
 			if len(fetches.Records()) > 0 {
 				logWithId("debug", src.name,
 					fmt.Sprintf("Consumed %d records", len(fetches.Records())))
+				incrementRecordsConsumed(int64(len(fetches.Records())))
 				iter := fetches.RecordIter()
 				for !iter.Done() {
 					record := iter.Next()
@@ -376,9 +385,11 @@ func forwardRecords(src *Redpanda, dst *Redpanda, ctx context.Context) {
 				logWithId("error", src.name,
 					fmt.Sprintf("Unable to send %d record(s) to %s: %s",
 						len(fetches.Records()), dst.name, err.Error()))
+				incrementRecordsFailed(int64(len(fetches.Records())))
 				backoff(&errCount)
 			} else {
 				sent = true
+				incrementRecordsProduced(int64(len(fetches.Records())))
 				logWithId("debug", src.name,
 					fmt.Sprintf("Sent %d records to %s",
 						len(fetches.Records()), dst.name))
@@ -405,6 +416,7 @@ func forwardRecords(src *Redpanda, dst *Redpanda, ctx context.Context) {
 				backoff(&errCount)
 			} else {
 				errCount = 0 // Reset error counter
+				updateErrorCount(0, "")
 				committed = true
 				logWithId("debug", src.name, "Offsets committed")
 			}
@@ -419,6 +431,8 @@ func main() {
 		"config", "agent.yaml", "path to agent config file")
 	logLevelStr := flag.String(
 		"loglevel", "info", "logging level")
+	httpAddr := flag.String(
+		"http", ":8080", "HTTP server address for monitoring endpoints")
 	flag.Parse()
 
 	logLevel, _ := log.ParseLevel(*logLevelStr)
@@ -427,18 +441,44 @@ func main() {
 	InitConfig(configFile)
 	mqttSource := config.Bool("source.mqtt")
 
+	// Initialize HTTP status server
+	statusServer = initStatusServer(*httpAddr)
+	go func() {
+		if err := statusServer.Start(); err != nil && err != http.ErrServerClosed {
+			log.Errorf("HTTP server error: %v", err)
+		}
+	}()
+	setStatus("initializing")
+
 	if mqttSource {
 		initMqtt(&sourceMqtt, &sourceOnce, Source)
 		go serveMqtt(&sourceMqtt)
 
 		initClient(&destination, &destinationOnce, Destination)
+		
+		// Set agent info for status reporting
+		var topicNames []string
+		for _, t := range sourceMqtt.topics {
+			topicNames = append(topicNames, t.String())
+		}
+		setAgentInfo("MQTT", destination.name, true, topicNames, "")
 	} else {
 		initClient(&source, &sourceOnce, Source)
 		initClient(&destination, &destinationOnce, Destination)
 
 		checkTopics(&source)
 		checkTopics(&destination)
+		
+		// Set agent info for status reporting
+		var topicNames []string
+		for _, t := range AllTopics() {
+			topicNames = append(topicNames, t.String())
+		}
+		consumerGroup := config.String("source.consumer_group_id")
+		setAgentInfo(source.name, destination.name, false, topicNames, consumerGroup)
 	}
+
+	setStatus("running")
 
 	ctx, stop := signal.NotifyContext(
 		context.Background(), os.Interrupt, os.Kill)
