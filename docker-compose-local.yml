@@ -1,0 +1,17 @@
+version: '3'
+services:  
+  redpanda-edge-agent:
+    build: 
+      context: .
+      dockerfile: docker/Dockerfile
+    image: redpanda-edge-agent:latest
+    volumes:
+      - ./config/certs:/etc/redpanda/certs
+      - ./config/agent.yaml:/etc/redpanda/agent.yaml
+    ports:
+      - "1773:1883"
+      - "8773:8883"
+      - "8073:8083"
+      - "8074:8084"
+      - "8070:8080"
+    command: ./redpanda-edge-agent -config /etc/redpanda/agent.yaml

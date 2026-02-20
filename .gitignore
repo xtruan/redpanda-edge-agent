@@ -23,5 +23,6 @@ redpanda-edge-agent*
 env/
 
 test/
+config/
 
 .DS_Store
